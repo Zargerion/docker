@@ -1,0 +1,57 @@
+version: '3.8'
+
+services:
+  # Docker-in-Docker контейнер
+  docker-dind:
+    image: docker:dind
+    container_name: docker-dind
+    privileged: true  # Обязательно для DinD
+    ports:
+      - "2376:2376"   # Docker API порт
+    volumes:
+      - dind-data:/var/lib/docker  # Данные Docker
+    environment:
+      - DOCKER_TLS_CERTDIR=/certs
+    command: --storage-driver=overlay2 --host=tcp://0.0.0.0:2376
+    networks:
+      - dind-network
+    restart: unless-stopped
+    logging:
+      driver: "none"  # Отключаем логи
+
+  # Клиент для работы с DinD
+  docker-client:
+    image: docker:latest
+    container_name: docker-client
+    depends_on:
+      - docker-dind
+    environment:
+      - DOCKER_HOST=tcp://docker-dind:2376
+      - DOCKER_TLS_VERIFY=0
+    networks:
+      - dind-network
+    command: sleep infinity  # Оставляем контейнер запущенным
+    restart: unless-stopped
+
+  # Веб-интерфейс для управления (опционально)
+  portainer:
+    image: portainer/portainer-ce:latest
+    container_name: portainer
+    ports:
+      - "9000:9000"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - portainer-data:/data
+    networks:
+      - dind-network
+    restart: unless-stopped
+
+volumes:
+  dind-data:
+    driver: local
+  portainer-data:
+    driver: local
+
+networks:
+  dind-network:
+    driver: bridge

@@ -1,0 +1,287 @@
+# ===============================================
+# ДЕМОНСТРАЦИЯ РАЗЛИЧНЫХ ТИПОВ DOCKER СЕТЕЙ
+# ===============================================
+# Этот файл показывает все основные типы сетей в Docker
+
+version: '3.8'
+
+services:
+  # ===============================================
+  # FRONTEND СЕТЬ (публично доступная)
+  # ===============================================
+  
+  # Load Balancer
+  load-balancer:
+    build: .
+    container_name: load-balancer
+    command: ["nginx-lb"]
+    ports:
+      - "80:80"
+      - "443:443"
+    networks:
+      - frontend
+      - backend
+    volumes:
+      - ./lb-config:/etc/nginx/conf.d:ro
+    depends_on:
+      - web1
+      - web2
+    restart: unless-stopped
+
+  # Web серверы
+  web1:
+    build: .
+    container_name: web1
+    command: ["web-server"]
+    environment:
+      - SERVER_NAME=web1
+      - SERVER_PORT=80
+    networks:
+      frontend:
+        aliases:
+          - webserver1
+      backend:
+        ipv4_address: 172.19.0.10
+    volumes:
+      - web1-data:/var/www/html
+    restart: unless-stopped
+
+  web2:
+    build: .
+    container_name: web2
+    command: ["web-server"]
+    environment:
+      - SERVER_NAME=web2
+      - SERVER_PORT=80
+    networks:
+      frontend:
+        aliases:
+          - webserver2
+      backend:
+        ipv4_address: 172.19.0.11
+    volumes:
+      - web2-data:/var/www/html
+    restart: unless-stopped
+
+  # ===============================================
+  # BACKEND СЕТЬ (внутренняя)
+  # ===============================================
+  
+  # API серверы
+  api1:
+    build: .
+    container_name: api1
+    command: ["api-server"]
+    environment:
+      - API_NAME=api1
+      - API_PORT=8080
+      - DATABASE_HOST=database
+    networks:
+      - backend
+      - database-net
+    depends_on:
+      - database
+      - cache
+    restart: unless-stopped
+
+  api2:
+    build: .
+    container_name: api2
+    command: ["api-server"]
+    environment:
+      - API_NAME=api2
+      - API_PORT=8080
+      - DATABASE_HOST=database
+    networks:
+      - backend
+      - database-net
+    depends_on:
+      - database
+      - cache
+    restart: unless-stopped
+
+  # ===============================================
+  # DATABASE СЕТЬ (изолированная)
+  # ===============================================
+  
+  database:
+    image: postgres:15-alpine
+    container_name: database
+    environment:
+      POSTGRES_DB: testdb
+      POSTGRES_USER: testuser
+      POSTGRES_PASSWORD: testpass
+    volumes:
+      - db-data:/var/lib/postgresql/data
+    networks:
+      database-net:
+        ipv4_address: 172.20.0.10
+    restart: unless-stopped
+
+  # Кэш в изолированной сети
+  cache:
+    image: redis:7-alpine
+    container_name: cache
+    command: redis-server --requirepass cachepass
+    volumes:
+      - cache-data:/data
+    networks:
+      - database-net
+    restart: unless-stopped
+
+  # ===============================================
+  # МОНИТОРИНГ СЕТЬ
+  # ===============================================
+  
+  # Контейнер для мониторинга сети
+  network-monitor:
+    build: .
+    container_name: network-monitor
+    command: ["network-monitor"]
+    privileged: true
+    networks:
+      - frontend
+      - backend
+      - database-net
+      - monitoring
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    restart: unless-stopped
+
+  # Prometheus для метрик сети
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: prometheus
+    volumes:
+      - ./monitoring/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus-data:/prometheus
+    networks:
+      - monitoring
+    ports:
+      - "9090:9090"
+    restart: unless-stopped
+
+  # ===============================================
+  # ТЕСТОВЫЕ КОНТЕЙНЕРЫ
+  # ===============================================
+  
+  # Контейнер без сети (isolated)
+  isolated-container:
+    build: .
+    container_name: isolated
+    command: ["isolated-mode"]
+    network_mode: "none"
+    volumes:
+      - isolated-data:/app/data
+
+  # Контейнер с host сетью
+  host-network-container:
+    build: .
+    container_name: host-networked
+    command: ["host-mode"]
+    network_mode: "host"
+    volumes:
+      - host-data:/app/data
+
+  # Контейнер, использующий сеть другого контейнера
+  container-network:
+    build: .
+    container_name: shared-network
+    command: ["shared-mode"]
+    network_mode: "container:web1"
+    depends_on:
+      - web1
+
+# ===============================================
+# VOLUMES
+# ===============================================
+volumes:
+  web1-data:
+  web2-data:
+  db-data:
+  cache-data:
+  prometheus-data:
+  isolated-data:
+  host-data:
+
+# ===============================================
+# NETWORKS
+# ===============================================
+networks:
+  # Frontend сеть (bridge с доступом извне)
+  frontend:
+    driver: bridge
+    driver_opts:
+      com.docker.network.bridge.name: docker-frontend
+    ipam:
+      config:
+        - subnet: 172.18.0.0/24
+          gateway: 172.18.0.1
+
+  # Backend сеть (bridge внутренняя)
+  backend:
+    driver: bridge
+    internal: false  # Доступ в интернет разрешен
+    driver_opts:
+      com.docker.network.bridge.name: docker-backend
+    ipam:
+      config:
+        - subnet: 172.19.0.0/24
+          gateway: 172.19.0.1
+
+  # Database сеть (полностью изолированная)
+  database-net:
+    driver: bridge
+    internal: true   # Нет доступа в интернет
+    driver_opts:
+      com.docker.network.bridge.name: docker-database
+    ipam:
+      config:
+        - subnet: 172.20.0.0/24
+          gateway: 172.20.0.1
+
+  # Monitoring сеть
+  monitoring:
+    driver: bridge
+
+# ===============================================
+# КОМАНДЫ ДЛЯ ТЕСТИРОВАНИЯ СЕТЕЙ:
+# ===============================================
+#
+# Запуск всех сервисов:
+# docker-compose -f docker-compose-networks.yml up -d
+#
+# Тестирование связности между контейнерами:
+# docker exec web1 ping web2
+# docker exec api1 ping database
+# docker exec web1 curl http://api1:8080/health
+#
+# Проверка сетевых настроек:
+# docker exec web1 ip route
+# docker exec web1 ip addr show
+# docker exec web1 cat /etc/resolv.conf
+#
+# Тестирование DNS разрешения:
+# docker exec web1 nslookup api1
+# docker exec web1 nslookup webserver1
+#
+# Анализ трафика:
+# docker exec network-monitor tcpdump -i eth0
+# docker exec network-monitor netstat -tlnp
+#
+# Проверка изоляции:
+# docker exec isolated ping 8.8.8.8  # Должно не работать
+# docker exec database ping google.com  # Должно не работать (internal: true)
+#
+# Мониторинг сетевой активности:
+# docker exec network-monitor iftop
+# docker exec network-monitor nethogs
+#
+# Просмотр сетевых пространств имен:
+# docker network ls
+# docker network inspect frontend
+# docker network inspect backend
+#
+# Подключение к сетям во время выполнения:
+# docker network connect monitoring web1
+# docker network disconnect frontend web1

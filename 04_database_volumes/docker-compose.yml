@@ -1,0 +1,217 @@
+# ===============================================
+# DOCKER COMPOSE ДЛЯ ДЕМОНСТРАЦИИ VOLUMES
+# ===============================================
+# Этот файл показывает различные способы работы с volumes
+# и персистентным хранением данных
+
+version: '3.8'
+
+services:
+  # PostgreSQL с именованным volume
+  postgres:
+    image: postgres:15-alpine
+    container_name: demo-postgres
+    environment:
+      POSTGRES_DB: webapp
+      POSTGRES_USER: webuser
+      POSTGRES_PASSWORD: webpass123
+    volumes:
+      # Именованный volume для данных
+      - postgres_data:/var/lib/postgresql/data
+      # Bind mount для скриптов инициализации
+      - ./init-scripts:/docker-entrypoint-initdb.d:ro
+      # Bind mount для бэкапов
+      - ./backups:/backup
+    ports:
+      - "5432:5432"
+    networks:
+      - db-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U webuser -d webapp"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # MySQL с bind mount
+  mysql:
+    image: mysql:8.0
+    container_name: demo-mysql
+    environment:
+      MYSQL_ROOT_PASSWORD: rootpass123
+      MYSQL_DATABASE: webapp
+      MYSQL_USER: webuser
+      MYSQL_PASSWORD: webpass123
+    volumes:
+      # Bind mount - данные сохраняются в локальной папке
+      - ./mysql-data:/var/lib/mysql
+      # Конфигурационный файл
+      - ./mysql.cnf:/etc/mysql/conf.d/custom.cnf:ro
+      # Логи
+      - mysql_logs:/var/log/mysql
+    ports:
+      - "3306:3306"
+    networks:
+      - db-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "webuser", "-pwebpass123"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # MongoDB с tmpfs для временных данных
+  mongodb:
+    image: mongo:6.0
+    container_name: demo-mongodb
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: admin
+      MONGO_INITDB_ROOT_PASSWORD: adminpass123
+      MONGO_INITDB_DATABASE: webapp
+    volumes:
+      # Именованный volume для данных
+      - mongodb_data:/data/db
+      # tmpfs для временных файлов (в RAM)
+      - type: tmpfs
+        target: /tmp
+        tmpfs:
+          size: 100M
+    ports:
+      - "27017:27017"
+    networks:
+      - db-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "mongo", "--eval", "db.adminCommand('ismaster')"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # Redis с volume для персистентности
+  redis:
+    image: redis:7-alpine
+    container_name: demo-redis
+    command: redis-server --appendonly yes --requirepass redispass123
+    volumes:
+      # Именованный volume для AOF файлов
+      - redis_data:/data
+      # Bind mount для конфигурации
+      - ./redis.conf:/usr/local/etc/redis/redis.conf:ro
+    ports:
+      - "6379:6379"
+    networks:
+      - db-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "redis-cli", "-a", "redispass123", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 3
+
+  # Контейнер для бэкапов
+  backup:
+    build: .
+    container_name: demo-backup
+    volumes:
+      # Доступ к данным всех БД для бэкапа
+      - postgres_data:/postgres-data:ro
+      - ./mysql-data:/mysql-data:ro
+      - mongodb_data:/mongodb-data:ro
+      - redis_data:/redis-data:ro
+      # Директория для сохранения бэкапов
+      - backup_storage:/backup
+    networks:
+      - db-network
+    depends_on:
+      - postgres
+      - mysql
+      - mongodb
+      - redis
+    # Запускаем бэкап каждый час
+    command: ["sh", "-c", "while true; do sleep 3600; /scripts/backup.sh; done"]
+
+  # Контейнер для мониторинга volumes
+  volume-monitor:
+    image: alpine:latest
+    container_name: volume-monitor
+    volumes:
+      # Монтируем все volumes только для чтения
+      - postgres_data:/data/postgres:ro
+      - mongodb_data:/data/mongodb:ro
+      - redis_data:/data/redis:ro
+      - mysql_logs:/data/mysql-logs:ro
+      - backup_storage:/data/backups:ro
+      # Bind mount для скриптов мониторинга
+      - ./monitoring:/scripts:ro
+    command: ["sh", "/scripts/monitor.sh"]
+    restart: unless-stopped
+
+# Именованные volumes
+volumes:
+  # Данные PostgreSQL
+  postgres_data:
+    driver: local
+    driver_opts:
+      type: none
+      o: bind
+      device: ./volumes/postgres
+  
+  # Данные MongoDB  
+  mongodb_data:
+    driver: local
+    
+  # Данные Redis
+  redis_data:
+    driver: local
+    
+  # Логи MySQL
+  mysql_logs:
+    driver: local
+    
+  # Хранилище бэкапов
+  backup_storage:
+    driver: local
+    driver_opts:
+      type: none
+      o: bind
+      device: ./volumes/backups
+
+# Сети
+networks:
+  db-network:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.25.0.0/16
+
+# ===============================================
+# КОМАНДЫ ДЛЯ РАБОТЫ С VOLUMES:
+# ===============================================
+#
+# Запуск всех сервисов:
+# docker-compose up -d
+#
+# Создание директорий для bind mounts:
+# mkdir -p volumes/postgres volumes/backups mysql-data backups
+#
+# Просмотр информации о volumes:
+# docker volume ls
+# docker volume inspect demo_postgres_data
+#
+# Резервное копирование volume:
+# docker run --rm -v demo_postgres_data:/source -v ${PWD}/backup:/backup \
+#   alpine tar czf /backup/postgres-backup.tar.gz -C /source .
+#
+# Восстановление volume:
+# docker run --rm -v demo_postgres_data:/target -v ${PWD}/backup:/backup \
+#   alpine tar xzf /backup/postgres-backup.tar.gz -C /target
+#
+# Клонирование volume:
+# docker run --rm -v demo_postgres_data:/source -v new_postgres_data:/target \
+#   alpine cp -a /source/. /target/
+#
+# Очистка всех volumes:
+# docker-compose down -v
+#
+# Мониторинг использования места:
+# docker system df -v

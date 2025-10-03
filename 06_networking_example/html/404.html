@@ -1,0 +1,75 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>404 - Страница не найдена</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            margin: 0;
+            padding: 20px;
+            background: linear-gradient(135deg, #ff6b6b 0%, #ee5a24 100%);
+            color: white;
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        .error-container {
+            text-align: center;
+            background: rgba(255, 255, 255, 0.1);
+            padding: 40px;
+            border-radius: 15px;
+            backdrop-filter: blur(10px);
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+        }
+        h1 {
+            font-size: 4em;
+            margin: 0;
+            text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.3);
+        }
+        h2 {
+            margin: 20px 0;
+            color: #ffd700;
+        }
+        p {
+            font-size: 1.2em;
+            margin: 20px 0;
+        }
+        .btn {
+            background: #4CAF50;
+            color: white;
+            padding: 15px 30px;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            text-decoration: none;
+            display: inline-block;
+            margin: 10px;
+            transition: background 0.3s;
+            font-size: 1.1em;
+        }
+        .btn:hover {
+            background: #45a049;
+        }
+    </style>
+</head>
+<body>
+    <div class="error-container">
+        <h1>404</h1>
+        <h2>Страница не найдена</h2>
+        <p>Запрашиваемая страница не существует или была перемещена.</p>
+        <p>Возможно, вы ищете:</p>
+        <ul style="text-align: left; display: inline-block;">
+            <li><a href="/" style="color: #ffd700;">Главная страница</a></li>
+            <li><a href="/health" style="color: #ffd700;">Health Check</a></li>
+            <li><a href="/api/" style="color: #ffd700;">API Endpoint</a></li>
+            <li><a href="/info" style="color: #ffd700;">Информация о контейнере</a></li>
+        </ul>
+        <br><br>
+        <a href="/" class="btn">Вернуться на главную</a>
+    </div>
+</body>
+</html>
+

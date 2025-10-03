@@ -1,0 +1,484 @@
+# ===============================================
+# ПРОДВИНУТЫЕ ВОЗМОЖНОСТИ DOCKER COMPOSE
+# ===============================================
+# Демонстрация расширенных функций Docker Compose
+
+version: '3.8'
+
+# ===============================================
+# X-TEMPLATES (YAML ANCHORS)
+# ===============================================
+# Переиспользуемые конфигурации
+
+x-logging: &default-logging
+  driver: "json-file"
+  options:
+    max-size: "10m"
+    max-file: "3"
+
+x-healthcheck: &default-healthcheck
+  interval: 30s
+  timeout: 10s
+  retries: 3
+  start_period: 40s
+
+x-deploy: &default-deploy
+  resources:
+    limits:
+      cpus: '0.5'
+      memory: 512M
+    reservations:
+      cpus: '0.25'
+      memory: 256M
+  restart_policy:
+    condition: on-failure
+    delay: 5s
+    max_attempts: 3
+
+services:
+  # ===============================================
+  # СЕРВИСЫ С РАСШИРЕННЫМИ ВОЗМОЖНОСТЯМИ
+  # ===============================================
+  
+  # Основное приложение с secrets
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: production
+      args:
+        BUILDKIT_INLINE_CACHE: 1
+        DEVELOPMENT: false
+        VERSION: 1.0.0
+      cache_from:
+        - myregistry/app:cache
+      secrets:
+        - api_key
+        - db_password
+    image: advanced-app:latest
+    container_name: advanced-app
+    hostname: app-server
+    
+    # Переменные окружения из файлов
+    env_file:
+      - .env
+      - .env.production
+    
+    environment:
+      - NODE_ENV=production
+      - API_URL=http://api:3000
+      - DB_HOST=database
+    
+    # Секреты (Docker Swarm)
+    secrets:
+      - source: api_key
+        target: /run/secrets/api_key
+        mode: 0400
+      - source: db_password
+        target: /run/secrets/db_password
+        mode: 0400
+    
+    # Конфигурации
+    configs:
+      - source: app_config
+        target: /app/config.yml
+        mode: 0444
+    
+    # Volumes с расширенными опциями
+    volumes:
+      - type: volume
+        source: app_data
+        target: /app/data
+        volume:
+          nocopy: true
+      - type: bind
+        source: ./logs
+        target: /app/logs
+        bind:
+          propagation: rshared
+      - type: tmpfs
+        target: /tmp
+        tmpfs:
+          size: 100M
+          mode: 1777
+    
+    ports:
+      - target: 8080
+        published: 8080
+        protocol: tcp
+        mode: host
+    
+    networks:
+      - frontend
+      - backend
+    
+    depends_on:
+      database:
+        condition: service_healthy
+      cache:
+        condition: service_started
+    
+    logging: *default-logging
+    healthcheck: *default-healthcheck
+    deploy: *default-deploy
+    
+    # Дополнительные хосты
+    extra_hosts:
+      - "api.external.com:192.168.1.100"
+      - "metrics.local:127.0.0.1"
+    
+    # Ограничения ресурсов (только для Compose v2.4+)
+    mem_limit: 512m
+    mem_reservation: 256m
+    cpus: 0.5
+    
+    # Политика перезапуска
+    restart: unless-stopped
+    
+    # Инициализация
+    init: true
+    
+    # Пользователь
+    user: "1001:1001"
+    
+    # Рабочая директория
+    working_dir: /app
+    
+    # Команда и entrypoint
+    entrypoint: ["/app/init.sh"]
+    command: ["python3", "app.py"]
+    
+
+  # ===============================================
+  # API СЕРВИС С ПРОФИЛЯМИ
+  # ===============================================
+  
+  api:
+    build: ./api
+    container_name: api-service
+    environment:
+      - SERVICE_MODE=api
+    networks:
+      - backend
+    profiles:
+      - api
+      - full
+    logging: *default-logging
+
+  # ===============================================
+  # БАЗА ДАННЫХ С РАСШИРЕННОЙ КОНФИГУРАЦИЕЙ
+  # ===============================================
+  
+  database:
+    image: postgres:15-alpine
+    container_name: postgres-db
+    
+    # Переменные из секретов
+    environment:
+      - POSTGRES_DB=appdb
+      - POSTGRES_USER=appuser
+      - POSTGRES_PASSWORD_FILE=/run/secrets/db_password
+    
+    secrets:
+      - db_password
+    
+    # Volumes с опциями
+    volumes:
+      - type: volume
+        source: postgres_data
+        target: /var/lib/postgresql/data
+        volume:
+          driver_opts:
+            type: none
+            o: bind
+            device: /host/postgres/data
+      - type: bind
+        source: ./init-scripts
+        target: /docker-entrypoint-initdb.d
+        read_only: true
+    
+    networks:
+      backend:
+        aliases:
+          - db
+          - postgres
+    
+    # Расширенный healthcheck
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U appuser -d appdb"]
+      <<: *default-healthcheck
+    
+    logging: *default-logging
+    deploy: *default-deploy
+
+  # ===============================================
+  # КЭШИРОВАНИЕ С REDIS
+  # ===============================================
+  
+  cache:
+    image: redis:7-alpine
+    container_name: redis-cache
+    
+    # Команда с аргументами
+    command: >
+      redis-server
+      --appendonly yes
+      --appendfsync everysec
+      --maxmemory 256mb
+      --maxmemory-policy allkeys-lru
+    
+    volumes:
+      - redis_data:/data
+      - ./redis.conf:/usr/local/etc/redis/redis.conf:ro
+    
+    networks:
+      - backend
+    
+    sysctls:
+      - net.core.somaxconn=65535
+    
+    ulimits:
+      nofile:
+        soft: 65536
+        hard: 65536
+    
+    logging: *default-logging
+
+  # ===============================================
+  # МОНИТОРИНГ СТЕКА
+  # ===============================================
+  
+  # Prometheus
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: prometheus
+    
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+      - '--web.console.libraries=/usr/share/prometheus/console_libraries'
+      - '--web.console.templates=/usr/share/prometheus/consoles'
+      - '--storage.tsdb.retention.time=15d'
+      - '--web.enable-lifecycle'
+    
+    volumes:
+      - ./monitoring/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus_data:/prometheus
+    
+    ports:
+      - "9090:9090"
+    
+    networks:
+      - monitoring
+    
+    profiles:
+      - monitoring
+      - full
+    
+    logging: *default-logging
+
+  # Grafana
+  grafana:
+    image: grafana/grafana:latest
+    container_name: grafana
+    
+    environment:
+      - GF_SECURITY_ADMIN_PASSWORD__FILE=/run/secrets/grafana_password
+      - GF_INSTALL_PLUGINS=grafana-clock-panel,grafana-simple-json-datasource
+    
+    secrets:
+      - grafana_password
+    
+    volumes:
+      - grafana_data:/var/lib/grafana
+      - ./monitoring/grafana/provisioning:/etc/grafana/provisioning:ro
+    
+    ports:
+      - "3000:3000"
+    
+    networks:
+      - monitoring
+    
+    depends_on:
+      - prometheus
+    
+    profiles:
+      - monitoring
+      - full
+
+  # ===============================================
+  # LOAD BALANCER С РАСШИРЕННОЙ КОНФИГУРАЦИЕЙ
+  # ===============================================
+  
+  nginx:
+    image: nginx:alpine
+    container_name: nginx-lb
+    
+    volumes:
+      - type: bind
+        source: ./nginx
+        target: /etc/nginx/conf.d
+        read_only: true
+      - type: volume
+        source: nginx_logs
+        target: /var/log/nginx
+    
+    ports:
+      - target: 80
+        published: 80
+        protocol: tcp
+      - target: 443
+        published: 443
+        protocol: tcp
+    
+    networks:
+      - frontend
+      - backend
+    
+    depends_on:
+      - app
+    
+    # Настройки безопасности
+    security_opt:
+      - no-new-privileges:true
+    
+    # Capabilities
+    cap_drop:
+      - ALL
+    cap_add:
+      - NET_BIND_SERVICE
+    
+    # Read-only root filesystem
+    read_only: true
+    
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,size=100m
+      - /var/cache/nginx:rw,noexec,nosuid,size=50m
+      - /var/run:rw,noexec,nosuid,size=10m
+
+# ===============================================
+# SECRETS
+# ===============================================
+secrets:
+  api_key:
+    external: true
+  db_password:
+    file: ./secrets/db_password.txt
+  grafana_password:
+    environment: "GRAFANA_PASSWORD"
+
+# ===============================================
+# CONFIGS
+# ===============================================
+configs:
+  app_config:
+    file: ./config/app.yml
+  nginx_config:
+    external: true
+
+# ===============================================
+# VOLUMES С РАСШИРЕННЫМИ ОПЦИЯМИ
+# ===============================================
+volumes:
+  app_data:
+    driver: local
+    driver_opts:
+      type: none
+      o: bind
+      device: ./data
+  
+  postgres_data:
+    driver: local
+    driver_opts:
+      type: nfs
+      o: addr=192.168.1.100,rw
+      device: ":/volume1/docker/postgres"
+  
+  redis_data:
+    driver: local
+  
+  prometheus_data:
+    driver: local
+    
+  grafana_data:
+    driver: local
+    
+  nginx_logs:
+    driver: local
+
+# ===============================================
+# NETWORKS С РАСШИРЕННЫМИ НАСТРОЙКАМИ
+# ===============================================
+networks:
+  frontend:
+    driver: bridge
+    driver_opts:
+      com.docker.network.bridge.name: docker-frontend
+      com.docker.network.bridge.enable_ip_masquerade: "true"
+    ipam:
+      driver: default
+      config:
+        - subnet: 172.16.0.0/16
+          gateway: 172.16.0.1
+          ip_range: 172.16.240.0/20
+    labels:
+      - "network.description=Frontend network"
+      - "network.type=public"
+
+  backend:
+    driver: bridge
+    internal: true
+    driver_opts:
+      com.docker.network.bridge.name: docker-backend
+    ipam:
+      config:
+        - subnet: 172.17.0.0/16
+    labels:
+      - "network.description=Backend network"
+      - "network.type=internal"
+
+  monitoring:
+    driver: bridge
+    attachable: true
+    ipam:
+      config:
+        - subnet: 172.18.0.0/16
+
+# ===============================================
+# КОМАНДЫ ДЛЯ РАБОТЫ С РАСШИРЕННЫМИ ВОЗМОЖНОСТЯМИ:
+# ===============================================
+#
+# Создание секретов:
+# echo "my_secret_key" | docker secret create api_key -
+# docker secret create db_password ./secrets/db_password.txt
+#
+# Создание конфигураций:
+# docker config create app_config ./config/app.yml
+#
+# Запуск с профилями:
+# docker-compose --profile full up -d
+# docker-compose --profile monitoring up -d
+#
+# Запуск с переменными окружения:
+# GRAFANA_PASSWORD=admin123 docker-compose up grafana
+#
+# Масштабирование с ограничениями ресурсов:
+# docker-compose up -d --scale app=3
+#
+# Использование переопределений:
+# docker-compose -f docker-compose-advanced.yml -f docker-compose.override.yml up
+#
+# Валидация конфигурации:
+# docker-compose config
+# docker-compose config --resolve-image-digests
+#
+# Мониторинг ресурсов:
+# docker-compose top
+# docker stats $(docker-compose ps -q)
+#
+# Логи с фильтрацией:
+# docker-compose logs --since=1h --tail=100 app
+#
+# Выполнение команд:
+# docker-compose exec app /app/maintenance.sh
+# docker-compose run --rm app python manage.py migrate
