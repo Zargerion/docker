@@ -1,0 +1,26 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Simple Docker App</title>
+    <style>
+        body { font-family: Arial; text-align: center; margin-top: 50px; }
+        h1 { color: #2c3e50; }
+        .info { background: #ecf0f1; padding: 20px; margin: 20px; border-radius: 5px; }
+    </style>
+</head>
+<body>
+    <h1>🐳 Hello from Docker!</h1>
+    <div class="info">
+        <h3>Информация о приложении:</h3>
+        <p><strong>Registry:</strong> Docker Hub</p>
+        <p><strong>Username:</strong> zargerion</p>
+        <p><strong>Repository:</strong> new-repo</p>
+        <p><strong>Tag:</strong> latest</p>
+        <p><strong>Время:</strong> <span id="current-time"></span></p>
+    </div>
+    
+    <script>
+        document.getElementById('current-time').textContent = new Date().toLocaleString();
+    </script>
+</body>
+</html>

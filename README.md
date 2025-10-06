@@ -16,9 +16,10 @@
 
 ### 🚀 Продвинутые возможности
 7. **[07_advanced_features](./07_advanced_features/)** - BuildKit, secrets, multi-platform builds
-8. **[08_commands_reference](./08_commands_reference/)** - Полный справочник Docker команд
-9. **[09_best_practices](./09_best_practices/)** - Лучшие практики и оптимизация
-10. **[10_troubleshooting](./10_troubleshooting/)** - Руководство по устранению проблем
+8. **[11_docker_registry](./11_docker_registry/)** - Docker Registry: приватные репозитории и Docker Hub
+9. **[08_commands_reference](./08_commands_reference/)** - Полный справочник Docker команд
+10. **[09_best_practices](./09_best_practices/)** - Лучшие практики и оптимизация
+11. **[10_troubleshooting](./10_troubleshooting/)** - Руководство по устранению проблем
 
 ## 🎓 Как использовать этот курс
 
@@ -32,7 +33,8 @@
 1. **05_microservices_compose** - сложная архитектура
 2. **06_networking_example** - глубокое понимание сетей
 3. **07_advanced_features** - современные возможности Docker
-4. **09_best_practices** - промышленные стандарты
+4. **11_docker_registry** - приватные репозитории и Docker Hub
+5. **09_best_practices** - промышленные стандарты
 
 ### Для решения проблем
 - **10_troubleshooting** - когда что-то не работает
@@ -210,6 +212,7 @@ docker-compose down -v
 - [ ] **05_microservices_compose** - Микросервисы
 - [ ] **06_networking_example** - Сети Docker
 - [ ] **07_advanced_features** - Продвинутые возможности
+- [ ] **11_docker_registry** - Docker Registry и Docker Hub
 - [ ] **08_commands_reference** - Справочник команд
 - [ ] **09_best_practices** - Лучшие практики
 - [ ] **10_troubleshooting** - Устранение проблем

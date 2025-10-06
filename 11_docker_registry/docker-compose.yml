@@ -1,0 +1,27 @@
+version: '3.8'
+
+# 🐳 Простой Docker Compose для Docker Hub Workflow
+# Логин → Билд → Пуш → Пулл → Запуск
+
+services:
+  # 📦 Простое веб-приложение
+  web:
+    image: ${DOCKER_USERNAME:-your_username}/${APP_NAME:-new-repo}:${APP_TAG:-latest}
+    container_name: simple-webapp
+    ports:
+      - "8080:80"
+    restart: unless-stopped
+    environment:
+      - APP_NAME=${APP_NAME:-simple-webapp}
+      - DOCKER_USERNAME=${DOCKER_USERNAME:-your_username}
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost/"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+
+# 🌐 Сеть
+networks:
+  default:
+    driver: bridge

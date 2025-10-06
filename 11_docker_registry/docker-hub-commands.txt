@@ -1,0 +1,95 @@
+# 🐳 Docker Hub - Команды для работы с приватным репозиторием
+
+## 1. 🔐 Аутентификация
+docker login
+
+## 2. 🏗️ Сборка и тегирование образа
+# Сборка образа
+docker build -t myapp:latest .
+
+# Тегирование для Docker Hub (замените YOUR_USERNAME на ваш username)
+docker tag myapp:latest YOUR_USERNAME/my-private-app:latest
+
+# Альтернативно - сборка сразу с правильным тегом
+docker build -t YOUR_USERNAME/my-private-app:latest .
+
+## 3. 📤 Публикация в приватный репозиторий
+docker push YOUR_USERNAME/my-private-app:latest
+
+# Публикация нескольких тегов
+docker tag myapp:latest YOUR_USERNAME/my-private-app:v1.0
+docker tag myapp:latest YOUR_USERNAME/my-private-app:stable
+docker push YOUR_USERNAME/my-private-app:v1.0
+docker push YOUR_USERNAME/my-private-app:stable
+
+## 4. 📥 Загрузка из приватного репозитория
+docker pull YOUR_USERNAME/my-private-app:latest
+
+# Запуск контейнера
+docker run -d -p 8080:80 --name my-private-app YOUR_USERNAME/my-private-app:latest
+
+## 5. 🔍 Проверка и поиск
+# Поиск ваших репозиториев
+docker search YOUR_USERNAME
+
+# Просмотр локальных образов
+docker images YOUR_USERNAME/*
+
+# Информация о репозитории
+docker inspect YOUR_USERNAME/my-private-app:latest
+
+## 6. 🗑️ Управление образами
+# Удаление локального образа
+docker rmi YOUR_USERNAME/my-private-app:latest
+
+# Удаление с Docker Hub (через веб-интерфейс)
+# Перейдите на https://hub.docker.com/r/YOUR_USERNAME/my-private-app
+
+## 7. 🔄 Обновление образа
+# Обновление существующего образа
+docker build -t YOUR_USERNAME/my-private-app:latest .
+docker push YOUR_USERNAME/my-private-app:latest
+
+# Обновление запущенного контейнера
+docker stop my-private-app
+docker rm my-private-app
+docker pull YOUR_USERNAME/my-private-app:latest
+docker run -d -p 8080:80 --name my-private-app YOUR_USERNAME/my-private-app:latest
+
+## 8. 📊 Мониторинг
+# Логи контейнера
+docker logs my-private-app
+
+# Статистика использования ресурсов
+docker stats my-private-app
+
+# Проверка состояния
+docker ps
+
+## 9. 🏷️ Управление тегами
+# Создание нового тега
+docker tag YOUR_USERNAME/my-private-app:latest YOUR_USERNAME/my-private-app:v2.0
+docker push YOUR_USERNAME/my-private-app:v2.0
+
+# Просмотр всех тегов
+docker images YOUR_USERNAME/my-private-app
+
+## 10. 🔧 Полезные команды
+# Очистка неиспользуемых образов
+docker image prune
+
+# Очистка всего неиспользуемого
+docker system prune -a
+
+# Проверка размера образов
+docker images --format "table {{.Repository}}\t{{.Tag}}\t{{.Size}}"
+
+## 💡 Важные моменты:
+# - Docker Hub бесплатно предоставляет 1 приватный репозиторий
+# - Публичные репозитории неограниченны
+# - Лимит: 200 pulls в 6 часов для бесплатного аккаунта
+# - Размер образа не должен превышать 10GB
+
+## 🌐 Веб-интерфейс:
+# Управление репозиториями: https://hub.docker.com
+# Ваш приватный репозиторий: https://hub.docker.com/r/YOUR_USERNAME/my-private-app
